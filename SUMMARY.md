@@ -442,7 +442,7 @@ Tidak ada `B0St`/`B0Sp`/`B0En`/`B1St`/`B1Sp`/`B1En` yang dipakai.
 
 1. Build & jalankan ThinkpadAssistant di X260 yang memakai EFI folder ini (YogaSMC 1.5.3 aktif).
 2. Klik ikon di menu bar → **Battery Threshold**.
-3. Baris pertama menampilkan pembacaan `BAT_PRIMARY`, mis. `BCTG 80% · BCSG 90%` (nama key ditampilkan apa adanya; lihat 9.4).
+3. Baris pertama menampilkan pembacaan `BAT_PRIMARY` yang sudah dikonversi, mis. `BCTG 95% · BCSG 0%` (nama key tetap ditampilkan; lihat 9.4).
 4. Pilih **Charge start (%)** atau **Charge stop (%)** → pilih persentase (0–100, kelipatan 5).
 5. **Refresh Threshold** untuk membaca ulang dari YogaSMC.
 
@@ -451,6 +451,7 @@ Tidak ada `B0St`/`B0Sp`/`B0En`/`B1St`/`B1Sp`/`B1En` yang dipakai.
 - `ThinkVPC` benar-benar ter-load (`ioreg -lw0 | grep -i ThinkVPC`).
 - Method ACPI `BCCS`/`BCSS` benar-benar ada di DSDT X260. Tidak ada SSDT lokal yang mendefinisikannya (semuanya hanya HKEY), jadi ini bergantung pada firmware OEM. Kalau tidak ada, `IORegistryEntrySetCFProperties` akan gagal dan alert akan muncul.
 - Pasangan get `BCTG` vs `BCSG`: kode memetakan `BCTG` = start, `BCSG` = stop berdasarkan pola pasangan `BCSS`/`BCSG` (root yang sama). Ini **inferensi**, bukan bukti dari binary; nilai set (`setCMstart`/`setCMstop`) tetap langsung dan tidak bergantung pada inferensi ini.
+- Nilai baca dari method ACPI bukan persentase mentah: **byte rendah = persentase (0–100), byte tinggi = flag/status**. Contoh hasil nyata di X260: `BCTG = 863 (0x035F)` → **95%**, `BCSG = 768 (0x0300)` → **0%**. Kode sekarang memotong dengan `raw & 0xFF` sebelum ditampilkan (`BatteryThresholdManager.percent(fromRaw:)`).
 - App Sandbox sudah dimatikan; apabila distribusi App Store diinginkan, pendekatan ini harus diganti helper privileged (SMJobBless).
 
 ### 9.5 Ringkasan status

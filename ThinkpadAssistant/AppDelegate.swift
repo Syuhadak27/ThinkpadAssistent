@@ -166,7 +166,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             guard !numbers.isEmpty else { throw BatteryThresholdError.readFailed }
-            return BatteryThresholdState(start: numbers["BCTG"], stop: numbers["BCSG"])
+            return BatteryThresholdState(
+                start: numbers["BCTG"].map(Self.percent(fromRaw:)),
+                stop: numbers["BCSG"].map(Self.percent(fromRaw:))
+            )
+        }
+
+        /// Method ACPI BCTG/BCSG mengembalikan word: byte rendah = persentase (0-100),
+        /// byte tinggi = flag/status. Contoh: 863 = 0x035F -> 95%, 768 = 0x0300 -> 0%.
+        private static func percent(fromRaw raw: Int) -> Int {
+            return min(100, max(0, raw & 0xFF))
         }
     }
 
