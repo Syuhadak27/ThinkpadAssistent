@@ -5,17 +5,36 @@ on:
   push:
     branches-ignore:
       - master
+    tags-ignore:
+      - 'v*'
+
+permissions:
+  contents: read
 
 jobs:
-  CI:
-    runs-on: macos-10.15
+  build:
+    # macOS 13 = Ventura (x86_64). Deployment target 13.0 => Ventura ke atas.
+    runs-on: macos-13
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Prepare Env
-        run: |
-          pod install
+        run: pod install
 
-      - name: Debug Build
-        run: xcodebuild -workspace ThinkpadAssistant.xcworkspace -scheme ThinkpadAssistant -destination "platform=macOS" -configuration Debug CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO | xcpretty && exit ${PIPESTATUS[0]}
+      - name: Build (Ventura 13.0+, universal x86_64 + arm64)
+        run: |
+          xcodebuild \
+            -workspace ThinkpadAssistant.xcworkspace \
+            -scheme ThinkpadAssistant \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            -quiet \
+            MACOSX_DEPLOYMENT_TARGET=13.0 \
+            CODE_SIGN_IDENTITY=- \
+            DEVELOPMENT_TEAM= \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS='x86_64 arm64'

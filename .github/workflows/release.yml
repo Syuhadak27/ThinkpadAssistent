@@ -2,89 +2,77 @@ name: Release Thinkpad Assistant
 
 on:
   push:
+    branches:
+      - master
     tags:
-      - "v*"
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
 env:
-  MACOS_APP_ARTIFACT: "ThinkpadAssistant.app"
-  MACOS_DMG_ARTIFACT: "ThinkpadAssistant.dmg"
-  XCBUILD_PATH: "build/Build/Products/Release"
+  MACOS_APP_ARTIFACT: ThinkpadAssistant.app
+  XCBUILD_PATH: build/Build/Products/Release
+  ARCHIVE_NAME: ThinkpadAssistant-macOS.zip
 
 jobs:
-  build:
-    runs-on: macos-10.15
+  release:
+    # macOS 13 = Ventura. binary hasil build bisa dipakai di Ventura ke atas.
+    runs-on: macos-13
 
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Download necessary software  and install CocoaPods
       - name: Prepare Env
+        run: pod install
+
+      - name: Build (Ventura 13.0+, universal x86_64 + arm64)
         run: |
-          brew install graphicsmagick imagemagick
-          npm install --global create-dmg
+          xcodebuild \
+            -workspace ThinkpadAssistant.xcworkspace \
+            -scheme ThinkpadAssistant \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            -quiet \
+            MACOSX_DEPLOYMENT_TARGET=13.0 \
+            CODE_SIGN_IDENTITY=- \
+            DEVELOPMENT_TEAM= \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS='x86_64 arm64'
 
-          pod install
-
-      # Import Certificates for sign
-      - name: Import Certificates
-        id: import_certs
-        uses: apple-actions/import-codesign-certs@v1
-        with:
-          p12-file-base64: ${{ secrets.CERTIFICATES_P12 }}
-          p12-password: ${{ secrets.CERTIFICATES_P12_PASSWORD }}
-
-      # Build Thinkpad Assistant
-      - name: Build
-        run: xcodebuild
-          -workspace ThinkpadAssistant.xcworkspace
-          -scheme ThinkpadAssistant
-          -destination "platform=macOS"
-          -configuration Release
-          -derivedDataPath build
-          CODE_SIGN_IDENTITY=- | xcpretty
-
-      # Check if Thinkpad Assistant is properly signed
-      - name: Check .app signature
-        run: codesign --verify -vvvv --deep --strict "${XCBUILD_PATH}/${MACOS_APP_ARTIFACT}"
-
-      # Create Apple Disk Image
-      - name: Create DMG
+      - name: Verify app
         run: |
-          #cp LICENSE ${XCBUILD_PATH}/license.txt
-          cd ${XCBUILD_PATH}
-          create-dmg ${MACOS_APP_ARTIFACT} || true
-          mv *.dmg ${MACOS_DMG_ARTIFACT}
-          cd -
-          mkdir Assets
-          cp -R ${XCBUILD_PATH}/*.dmg Assets
+          test -d "${XCBUILD_PATH}/${MACOS_APP_ARTIFACT}"
+          codesign --verify --deep --strict "${XCBUILD_PATH}/${MACOS_APP_ARTIFACT}"
 
-      # Get changes since last tag
-      - name: Generate Release Notes
+      - name: Package
         run: |
-          echo '### The latest changes are:' >> ReleaseNotes.md
-          git log --oneline $(git describe --tags --abbrev=0 HEAD^)..HEAD | sed '/^$/d' >> ReleaseNotes.md
+          cd "${XCBUILD_PATH}"
+          ditto -c -k --keepParent "${MACOS_APP_ARTIFACT}" "${GITHUB_WORKSPACE}/${ARCHIVE_NAME}"
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Create / update GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.MY_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body_path: ReleaseNotes.md
-          draft: false
-          prerelease: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          else
+            RELEASE_TAG="v${GITHUB_RUN_NUMBER}"
+          fi
+          echo "Release tag: ${RELEASE_TAG}"
 
-      - name: Upload Release Assets
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.MY_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: Assets/ThinkpadAssistant.dmg
-          asset_name: ThinkpadAssistant.dmg
-          asset_content_type: application/x-apple-diskimage
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" \
+              "${GITHUB_WORKSPACE}/${ARCHIVE_NAME}" --clobber
+          else
+            gh release create "${RELEASE_TAG}" \
+              "${GITHUB_WORKSPACE}/${ARCHIVE_NAME}#${ARCHIVE_NAME}" \
+              --title "Thinkpad Assistant ${RELEASE_TAG}" \
+              --generate-notes
+          fi
