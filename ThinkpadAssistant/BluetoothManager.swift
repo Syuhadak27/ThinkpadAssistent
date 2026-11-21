@@ -3,7 +3,7 @@
 //  ThinkpadAssistant
 //
 //  Created by Matt on 24.05.20.
-//  Copyright © 2020 Matthäus Szturc. All rights reserved.
+//  Dikelola oleh Syuhadak27. https://github.com/Syuhadak27/ThinkpadAssistent
 //
 import Foundation
 import IOBluetooth

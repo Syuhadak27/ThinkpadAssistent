@@ -97,11 +97,24 @@
                                     <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                 </textFieldCell>
                             </textField>
-                            <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="T1o-Dq-hQ6">
-                                <rect key="frame" x="20" y="18" width="360" height="15"/>
+                            <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="GHb-9K-2mNpQr">
+                                <rect key="frame" x="20" y="18" width="360" height="18"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxX="YES" flexibleMinY="YES"/>
-                                <textFieldCell key="cell" lineBreakMode="clipping" alignment="center" title="Copyright © 2020 Matthäus Szturc. All rights reserved." id="Dsc-bK-vCJ">
-                                    <font key="font" metaFont="label" size="12"/>
+                                <buttonCell key="cell" type="square" bezelStyle="regularSquare" alignment="center" inset="2" id="GHc-7L-3nRqSt">
+                                    <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                                    <font key="font" metaFont="system" size="11"/>
+                                    <string key="title">github.com/Syuhadak27/ThinkpadAssistent</string>
+                                    <color key="textColor" name="linkColor" catalog="System" colorSpace="catalog"/>
+                                </buttonCell>
+                                <connections>
+                                    <action selector="openGitHub:" target="ahD-Xn-7zm" id="GHa-4H-8vTyUw"/>
+                                </connections>
+                            </button>
+                            <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="T1o-Dq-hQ6">
+                                <rect key="frame" x="20" y="2" width="360" height="15"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMinX="YES" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                <textFieldCell key="cell" lineBreakMode="clipping" alignment="center" title="Hak cipta © 2026 Syuhadak27. Seluruh hak dilindungi." id="Dsc-bK-vCJ">
+                                    <font key="font" metaFont="label" size="10"/>
                                     <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                                     <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
                                 </textFieldCell>

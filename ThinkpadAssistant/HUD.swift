@@ -2,7 +2,7 @@
 //  HUD.swift
 //  ThinkpadAssistant
 //
-//  Copyright © 2020 Matthäus Szturc. All rights reserved.
+//  Dikelola oleh Syuhadak27. https://github.com/Syuhadak27/ThinkpadAssistent
 //
 
 import AppKit

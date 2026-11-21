@@ -2,8 +2,11 @@
 /* Class = "NSMenu"; title = "Main Menu"; ObjectID = "AYu-sK-qS6"; */
 "AYu-sK-qS6.title" = "Hlavní menu";
 
-/* Class = "NSTextFieldCell"; title = "Copyright © 2020 Matthäus Szturc. All rights reserved."; ObjectID = "Dsc-bK-vCJ"; */
-"Dsc-bK-vCJ.title" = "Copyright © 2020 Matthäus Szturc. Všechna práva vyhrazena.";
+/* Class = "NSTextFieldCell"; title = "Hak cipta © 2026 Syuhadak27. Seluruh hak dilindungi."; ObjectID = "Dsc-bK-vCJ"; */
+"Dsc-bK-vCJ.title" = "Hak cipta © 2026 Syuhadak27. Seluruh hak dilindungi.";
+
+/* Class = "NSButtonCell"; title = "github.com/Syuhadak27/ThinkpadAssistent"; ObjectID = "GHc-7L-3nRqSt"; */
+"GHc-7L-3nRqSt.title" = "github.com/Syuhadak27/ThinkpadAssistent";
 
 /* Class = "NSMenuItem"; title = "About Thinkpad Assistant"; ObjectID = "Kql-K9-yoI"; */
 "Kql-K9-yoI.title" = "O aplikaci Thinkpad Assistant";

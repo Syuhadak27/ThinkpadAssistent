@@ -2,8 +2,8 @@
 //  AboutViewController.swift
 //  ThinkpadAssistant
 //
-//  Created by Matt on 14.05.20.
-//  Copyright © 2020 Matthäus Szturc. All rights reserved.
+//  Dikelola oleh Syuhadak27.
+//  https://github.com/Syuhadak27/ThinkpadAssistent
 //
 
 import Foundation
@@ -27,6 +27,11 @@ class AboutViewController: NSViewController {
     
     @objc func appMovedToBackground() {
         self.view.window!.close()
+    }
+
+    @IBAction func openGitHub(_ sender: Any) {
+        guard let url = URL(string: "https://github.com/Syuhadak27/ThinkpadAssistent") else { return }
+        NSWorkspace.shared.open(url)
     }
     
 }

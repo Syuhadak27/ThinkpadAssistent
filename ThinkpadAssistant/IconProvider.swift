@@ -3,7 +3,7 @@
 //  ThinkpadAssistant
 //
 //  Created by Matt on 23.04.20.
-//  Copyright © 2020 Matthäus Szturc. All rights reserved.
+//  Dikelola oleh Syuhadak27. https://github.com/Syuhadak27/ThinkpadAssistent
 //
 
 import Cocoa
