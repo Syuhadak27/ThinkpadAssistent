@@ -18,8 +18,8 @@ env:
 
 jobs:
   release:
-    # macOS 13 = Ventura. binary hasil build bisa dipakai di Ventura ke atas.
-    runs-on: macos-13
+    # Runner Intel; deployment target 13.0 => binary jalan di Ventura ke atas.
+    runs-on: macos-15-intel
 
     steps:
       - uses: actions/checkout@v4
