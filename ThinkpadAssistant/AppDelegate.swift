@@ -8,6 +8,7 @@
 import Cocoa
 import ServiceManagement
 import IOKit
+import Darwin
 
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -142,7 +143,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             // Fallback: user client resmi YogaSMC (IOConnectSetCFProperties).
             var connect: io_connect_t = 0
-            let open = IOServiceOpen(service, mach_task_self(), 0, &connect)
+            let open = IOServiceOpen(service, mach_task_self_, 0, &connect)
             guard open == kIOReturnSuccess else { throw BatteryThresholdError.setFailed(kr) }
             defer { IOServiceClose(connect) }
             kr = IOConnectSetCFProperties(connect, cfProps)

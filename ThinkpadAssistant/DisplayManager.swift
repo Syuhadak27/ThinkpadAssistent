@@ -6,6 +6,7 @@
 //  Copyright © 2020 Matthäus Szturc. All rights reserved.
 //
 import Foundation
+import CoreGraphics
 
 final class DisplayManager {
     
