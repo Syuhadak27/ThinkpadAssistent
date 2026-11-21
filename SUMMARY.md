@@ -438,20 +438,37 @@ Payload yang dikirim (sesuai disassembly YogaSMC, bagian 4.2/4.3):
 `Battery = 1` = `BAT_PRIMARY` (0 = ANY, 1 = PRIMARY, 2 = SECONDARY).
 Tidak ada `B0St`/`B0Sp`/`B0En`/`B1St`/`B1Sp`/`B1En` yang dipakai.
 
-### 9.3 Cara pakai
+### 9.3 Cara pakai (tampilan menu baru)
 
-1. Build & jalankan ThinkpadAssistant di X260 yang memakai EFI folder ini (YogaSMC 1.5.3 aktif).
-2. Klik ikon di menu bar → **Battery Threshold**.
-3. Baris pertama menampilkan pembacaan `BAT_PRIMARY` yang sudah dikonversi, mis. `BCTG 95% · BCSG 0%` (nama key tetap ditampilkan; lihat 9.4).
-4. Pilih **Charge start (%)** atau **Charge stop (%)** → pilih persentase (0–100, kelipatan 5).
-5. **Refresh Threshold** untuk membaca ulang dari YogaSMC.
+Menu utama: **About → Monitor Capslock → Launch on Login → Battery Threshold → Check for Updates... → Quit**.
+
+`Check for Updates...` menanyakan `https://api.github.com/repos/Syuhadak27/ThinkpadAssistent/releases/latest` (silent saat launch, manual saat diklik). Kalau tag release berbeda dengan tag terakhir yang disimpan di `UserDefaults`, menu berubah jadi `Update Available (vN)` dan muncul pilihan **Download / Skip This Version / Later**.
+
+Submenu **Battery Threshold**:
+
+```
+BAT0 - 64% - Charging ⚡
+Threshold: Start 75% → Stop 85%
+
+Set Start Charge At  >
+Set Stop Charge At   >
+
+[✓] Enable Threshold
+Refresh Threshold
+```
+
+- Baris pertama diambil dari `AppleSmartBattery` di IORegistry (`CurrentCapacity`/`MaxCapacity`, `IsCharging`, `ExternalConnected`), **bukan** dari `BCTG`/`BCSG`.
+- Nama baterai dideteksi otomatis (`BAT0` atau `BAT1`); hanya satu yang ditampilkan.
+- `Set Start Charge At` / `Set Stop Charge At`: 0–100% kelipatan 5, dengan centang pada nilai aktif.
+- `Enable Threshold`: matikan → kirim `setCMstart=0`, `setCMstop=100`, `setCMInhibitCharge=0`. Hidupkan → kirim Start/Stop yang dipilih.
+- `BCTG`/`BCSG` **tidak lagi muncul di UI**; hanya dicatat ke debug log (`NSLog`) untuk keperluan audit.
 
 ### 9.4 Yang masih perlu diverifikasi di mesin X260
 
 - `ThinkVPC` benar-benar ter-load (`ioreg -lw0 | grep -i ThinkVPC`).
 - Method ACPI `BCCS`/`BCSS` benar-benar ada di DSDT X260. Tidak ada SSDT lokal yang mendefinisikannya (semuanya hanya HKEY), jadi ini bergantung pada firmware OEM. Kalau tidak ada, `IORegistryEntrySetCFProperties` akan gagal dan alert akan muncul.
-- Pasangan get `BCTG` vs `BCSG`: kode memetakan `BCTG` = start, `BCSG` = stop berdasarkan pola pasangan `BCSS`/`BCSG` (root yang sama). Ini **inferensi**, bukan bukti dari binary; nilai set (`setCMstart`/`setCMstop`) tetap langsung dan tidak bergantung pada inferensi ini.
-- Nilai baca dari method ACPI bukan persentase mentah: **byte rendah = persentase (0–100), byte tinggi = flag/status**. Contoh hasil nyata di X260: `BCTG = 863 (0x035F)` → **95%**, `BCSG = 768 (0x0300)` → **0%**. Kode sekarang memotong dengan `raw & 0xFF` sebelum ditampilkan (`BatteryThresholdManager.percent(fromRaw:)`).
+- Pasangan get `BCTG` vs `BCSG`: masih belum dipakai untuk UI. Nilai Start/Stop yang ditampilkan berasal dari pilihan user (UserDefaults), bukan dari pembacaan ACPI. Data mentah `BAT_PRIMARY` hanya masuk debug log.
+- Nilai baca dari method ACPI bukan persentase mentah: **byte rendah = persentase (0–100), byte tinggi = flag/status**. Contoh hasil nyata di X260: `863 (0x035F)` → 95%, `768 (0x0300)` → 0%. Informasi ini disimpan sebagai catatan audit, tidak lagi dipakai tampilan.
 - App Sandbox sudah dimatikan; apabila distribusi App Store diinginkan, pendekatan ini harus diganti helper privileged (SMJobBless).
 
 ### 9.5 Ringkasan status

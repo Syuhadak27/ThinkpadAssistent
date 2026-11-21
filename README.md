@@ -1,56 +1,157 @@
 <div><img src="ThinkpadAssistant/Assets.xcassets/AppIcon.appiconset/appIcon-64-min.png" width="48" height="48" align="left"/><h1>Thinkpad Assistant</h1></div>
-An Assistant Application that allows you to use all your Function Keys on a T-Series Thinkpad Laptop
 
-## Discussion
+Aplikasi pendamping untuk laptop ThinkPad seri T yang dijalankan sebagai macOS (Hackintosh). Aplikasi ini mengembalikan fungsi tombol keyboard, mengatur batas pengisian baterai lewat YogaSMC, dan memeriksa rilis terbaru langsung dari GitHub.
 
-- [Hackintosh-Forum.de](https://www.hackintosh-forum.de/forum/thread/47983-tool-thinkpad-assistant/) in German
-- [InsanelyMac.com](https://www.insanelymac.com/forum/topic/343588-tool-thinkpad-assistant/) in English
+> Versi ini ditujukan untuk **macOS Ventura 13 ke atas**. Binary hasil build bersifat **universal** (x86_64 + arm64) dan ditandatangani secara ad-hoc.
 
-## Features
+---
 
-- <b>F4</b>: Mute / Unmute Microphone (with Status LED indication)
-- <b>F7</b>: Screen mirroring / Screen extending
-- <b>F8</b>: Activate / Deactivate Wi-Fi
-- <b>Left Shift+F8</b>: Activate / Deactivate Bluetooth
-- <b>F9</b>: Open System Preferences
-- <b>F12</b>: Open Launchpad
-- <b>FN+Space</b>: Toggle Keyboard Backlight
+## Fitur
 
-## Demo
-![Demo](Screens/demo.gif)
+### Tombol fungsi
 
-## Installation
+| Tombol | Fungsi |
+|---|---|
+| **F4** | Bisu / aktifkan mikrofon (dengan indikator LED status) |
+| **F7** | Cerminkan / perpanjang layar |
+| **F8** | Aktifkan / nonaktifkan Wi-Fi |
+| **Shift + F8** | Aktifkan / nonaktifkan Bluetooth |
+| **F9** | Buka Pengaturan Sistem |
+| **F12** | Buka Launchpad |
+| **Fn + Spasi** | Aktifkan / nonaktifkan lampu keyboard |
 
-### Opencore
-1. Get a pair of Patch & SSDT from [Samples](https://github.com/MSzturc/ThinkpadAssistant/tree/master/Samples) folder
-2. Compile SSDT (ex. iasl -vo SSDT-T460-KBRD.dsl)
-3. Copy SSDT.aml to EFI/OC/ACPI
-4. Apply patch on config.plst with PlistBuddy
-5. Download Thinkpad Assistant
-6. Extract & Copy to Applications folder
-7. Start Thinkpad Assistant & Tick 'Launch on Login' in Menubar
-8. Reboot
+### Pengatur batas pengisian baterai (Battery Threshold)
 
+Fitur ini memakai jalur yang benar-benar ada di **YogaSMC 1.5.3** (kext lokal di folder `Refrensi-YogaSMC/Kexts/`), bukan SMC key yang sering disebut di internet.
 
-### Clover
-1. Get a pair of Patch & SSDT from [Samples](https://github.com/MSzturc/ThinkpadAssistant/tree/master/Samples) folder
-2. Compile SSDT (ex. iasl -vo SSDT-T460-KBRD.dsl)
-3. Copy SSDT.aml to EFI/CLOVER/ACPI/patched
-4. Apply patch on config.plst with PlistBuddy
-5. Download Thinkpad Assistant
-6. Extract & Copy to Applications folder
-7. Start Thinkpad Assistant & Tick 'Launch on Login' in Menubar
-8. Reboot
+Hasil audit terhadap binary referensi:
 
-## Tester & working Configs
+- `B0St`, `B0Sp`, `B0En`, `B1St`, `B1Sp`, `B1En` **tidak ada** di YogaSMC.
+- `B0St` yang beredar berasal dari **SMCBatteryManager 1.3.8** dan artinya **status baterai**, bukan batas pengisian.
+- Batas pengisian ditulis lewat properti `ThinkVPC`:
+  - `setCMstart` → method ACPI `BCCS` → EC
+  - `setCMstop` → method ACPI `BCSS` → EC
+  - `setCMInhibitCharge` → `BICS`
+  - `setCMForceDischarge` → `BDSS`
+  - `setCMPeakShiftState` → `PSSS`
 
+Aplikasi hanya menulis properti tersebut. Logika `setCMstart`/`setCMstop` → `BCCS`/`BCSS` tidak diubah.
 
-| Config | Tester | Bootloader | Image
-| ------ | ------ | ------ | ------ |
-| [T460](https://github.com/MSzturc/ThinkpadAssistant/tree/master/Samples/T460) | [MSzturc](https://github.com/MSzturc) | OpenCore | [Lenovo-T460-OpenCore](https://github.com/MSzturc/Lenovo-T460-OpenCore)
-| [T480](https://github.com/MSzturc/ThinkpadAssistant/tree/master/Samples/T480) | [xma](https://github.com/xma) | Clover | [T480-Clover](https://github.com/xma/T480-Clover)
-| [X1C6](https://github.com/MSzturc/ThinkpadAssistant/tree/master/Samples/X1C6) | [tylernguyen](https://github.com/tylernguyen) | OpenCore / Clover | [x1c6-hackintosh](https://github.com/tylernguyen/x1c6-hackintosh)
-| [T440p](https://github.com/MSzturc/ThinkpadAssistant/tree/master/Samples/T440p) | [pandel](https://www.hackintosh-forum.de/user/52804-pandel/) | Clover | - 
-| T460s | [simprecicchiani](https://github.com/simprecicchiani) | OpenCore | [Thinkpad-T460s-macOS-OpenCore](https://github.com/simprecicchiani/Thinkpad-T460s-macOS-OpenCore) 
-| T470s | [YBN-JUAN](https://github.com/YBN-JUAN) | OpenCore | [T470s-OpenCore-EFI](https://github.com/YBN-JUAN/T470s-OpenCore-EFI) 
+### Pemeriksa pembaruan
 
+Menu **Check for Updates...** menanyakan rilis terbaru dari:
+
+```
+https://api.github.com/repos/Syuhadak27/ThinkpadAssistent/releases/latest
+```
+
+Saat aplikasi dibuka, pengecekan dilakukan diam-diam. Bila ada tag rilis baru, judul menu berubah menjadi `Update Available (vN)` dan muncul pilihan **Download**, **Skip This Version**, atau **Later**.
+
+---
+
+## Tampilan menu
+
+Menu utama di menu bar:
+
+```
+About Thinkpad Assistant
+Monitor Capslock ✓
+Launch on Login ✓
+Battery Threshold >
+Check for Updates...
+Quit
+```
+
+Submenu **Battery Threshold**:
+
+```
+BAT0 - 64% - Charging ⚡
+Threshold: Start 75% → Stop 85%
+
+Set Start Charge At  >
+Set Stop Charge At   >
+
+[✓] Enable Threshold
+Refresh Threshold
+```
+
+Keterangan:
+
+- Baris pertama diambil dari `AppleSmartBattery` di IORegistry (persentase nyata, status `Charging ⚡` / `Not Charging 🔌` / `Discharging 🔋`).
+- Nama baterai dideteksi otomatis (`BAT0` atau `BAT1`); hanya satu baterai yang ditampilkan.
+- Pilihan Start/Stop tersedia dari 0% sampai 100% dengan kelipatan 5%.
+- **Enable Threshold** dinonaktifkan → mengirim `setCMstart=0`, `setCMstop=100`, `setCMInhibitCharge=0`.
+- **Enable Threshold** diaktifkan → mengirim nilai Start/Stop yang dipilih.
+- Kode internal YogaSMC (`BCTG`, `BCSG`) tidak pernah ditampilkan di antarmuka; hanya masuk log debug untuk keperluan audit.
+
+---
+
+## Instalasi
+
+### Persyaratan
+
+1. macOS **Ventura 13 atau lebih baru**.
+2. **YogaSMC 1.5.3** terpasang dan aktif di EFI (kext `YogaSMC-VENTURA.kext` untuk Ventura, `YogaSMC-SEQUOIA.kext` untuk Sequoia).
+3. SSDT pendukung sudah ada di `EFI/OC/ACPI` (misalnya `SSDT-THINK.aml`, `SSDT-BATX.aml`).
+4. Aplikasi **tidak disandbox** karena harus menulis properti ke IOService milik kext.
+
+### Langkah
+
+1. Unduh `ThinkpadAssistant-macOS.zip` dari halaman [Rilis GitHub](https://github.com/Syuhadak27/ThinkpadAssistent/releases).
+2. Ekstrak, lalu pindahkan `ThinkpadAssistant.app` ke folder **Aplikasi**.
+3. Karena aplikasi ditandatangani secara ad-hoc, jalankan dulu di Terminal bila macOS menolak:
+
+   ```bash
+   xattr -cr /Applications/ThinkpadAssistant.app
+   ```
+
+4. Jalankan aplikasi, lalu centang **Launch on Login** di menu bar agar otomatis berjalan saat masuk.
+5. Buka **Battery Threshold** dan atur nilai Start/Stop sesuai keinginan.
+
+### SSDT tombol keyboard
+
+Folder `Samples/` berisi pasangan patch dan SSDT untuk beberapa model (T440p, T460, T480, X1C6). Cara umumnya:
+
+```bash
+iasl -vo SSDT-T460-KBRD.dsl
+```
+
+Lalu salin file `.aml` hasil kompilasi ke `EFI/OC/ACPI` dan terapkan patch yang sesuai ke `config.plist`.
+
+---
+
+## Build otomatis (GitHub Actions)
+
+Dua workflow tersedia di `.github/workflows/`:
+
+| File | Fungsi |
+|---|---|
+| `build.yml` | Build Release untuk branch selain `master` dan pull request |
+| `release.yml` | Build Release untuk `master` / tag `v*`, lalu membuat atau memperbarui GitHub Release |
+
+Keduanya memakai runner **macos-15-intel** dan argumen:
+
+```
+MACOSX_DEPLOYMENT_TARGET=13.0
+ARCHS='x86_64 arm64'
+CODE_SIGN_IDENTITY=-
+```
+
+Hasil build dikemas sebagai `ThinkpadAssistant-macOS.zip` dan diunggah ke rilis GitHub.
+
+Folder `Refrensi-YogaSMC/` hanya dipakai sebagai **referensi audit** dan tidak pernah dimasukkan ke target build Xcode.
+
+---
+
+## Catatan penting
+
+- Batas pengisian sangat bergantung pada method ACPI `BCCS`/`BCSS` di firmware ThinkPad. Kalau method tidak ada, penulisan threshold akan gagal dan aplikasi menampilkan pesan kesalahan.
+- Ikon **petir ⚡** berarti baterai benar-benar sedang diisi. Ikon **colokan 🔌** berarti AC terpasang tetapi pengisian berhenti (misalnya karena batas Stop sudah tercapai).
+- Start threshold adalah batas saat pengisian **dimulai kembali** setelah berhenti; Stop threshold adalah batas saat pengisian **dihentikan**. mengubah Start saja tidak selalu menghentikan pengisian yang sedang berjalan.
+- Detail lengkap audit SMC key, offset binary, dan alur panggilan ada di [`SUMMARY.md`](SUMMARY.md).
+
+---
+
+## Repository
+
+https://github.com/Syuhadak27/ThinkpadAssistent
