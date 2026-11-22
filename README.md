@@ -1,57 +1,16 @@
 <div><img src="ThinkpadAssistant/Assets.xcassets/AppIcon.appiconset/appIcon-64-min.png" width="48" height="48" align="left"/><h1>Thinkpad Assistant</h1></div>
 
-Aplikasi pendamping untuk laptop ThinkPad seri T yang dijalankan sebagai macOS (Hackintosh). Aplikasi ini mengembalikan fungsi tombol keyboard, mengatur batas pengisian baterai lewat YogaSMC, dan memeriksa rilis terbaru langsung dari GitHub.
+Aplikasi menu bar untuk ThinkPad X260 (dan seri T lain) yang dijalankan di macOS / Hackintosh.
+Fokus utamanya adalah **Battery Threshold 20–100%** lewat YogaSMC, dikombinasikan dengan
+pemulihan tombol fungsi keyboard dan pembaruan otomatis via Sparkle 2.
 
-> Versi ini ditujukan untuk **macOS Ventura 13 ke atas**. Binary hasil build bersifat **universal** (x86_64 + arm64) dan ditandatangani secara ad-hoc.
-
----
-
-## Fitur
-
-### Tombol fungsi
-
-| Tombol | Fungsi |
-|---|---|
-| **F4** | Bisu / aktifkan mikrofon (dengan indikator LED status) |
-| **F7** | Cerminkan / perpanjang layar |
-| **F8** | Aktifkan / nonaktifkan Wi-Fi |
-| **Shift + F8** | Aktifkan / nonaktifkan Bluetooth |
-| **F9** | Buka Pengaturan Sistem |
-| **F12** | Buka Launchpad |
-| **Fn + Spasi** | Aktifkan / nonaktifkan lampu keyboard |
-
-### Pengatur batas pengisian baterai (Battery Threshold)
-
-Fitur ini memakai jalur yang benar-benar ada di **YogaSMC 1.5.3** (kext lokal di folder `Refrensi-YogaSMC/Kexts/`), bukan SMC key yang sering disebut di internet.
-
-Hasil audit terhadap binary referensi:
-
-- `B0St`, `B0Sp`, `B0En`, `B1St`, `B1Sp`, `B1En` **tidak ada** di YogaSMC.
-- `B0St` yang beredar berasal dari **SMCBatteryManager 1.3.8** dan artinya **status baterai**, bukan batas pengisian.
-- Batas pengisian ditulis lewat properti `ThinkVPC`:
-  - `setCMstart` → method ACPI `BCCS` → EC
-  - `setCMstop` → method ACPI `BCSS` → EC
-  - `setCMInhibitCharge` → `BICS`
-  - `setCMForceDischarge` → `BDSS`
-  - `setCMPeakShiftState` → `PSSS`
-
-Aplikasi hanya menulis properti tersebut. Logika `setCMstart`/`setCMstop` → `BCCS`/`BCSS` tidak diubah.
-
-### Pemeriksa pembaruan
-
-Menu **Check for Updates...** menanyakan rilis terbaru dari:
-
-```
-https://api.github.com/repos/Syuhadak27/ThinkpadAssistent/releases/latest
-```
-
-Saat aplikasi dibuka, pengecekan dilakukan diam-diam. Bila ada tag rilis baru, judul menu berubah menjadi `Update Available (vN)` dan muncul pilihan **Download**, **Skip This Version**, atau **Later**.
+> **macOS Ventura 13 ke atas • Universal (x86_64 + arm64) • Ad-hoc signed**
 
 ---
 
-## Tampilan menu
+## Tampilan Menu Bar
 
-Menu utama di menu bar:
+Ikon kecil di menu bar (di dekat ikon baterai) adalah status item aplikasi. Klik untuk membuka menu:
 
 ```
 About Thinkpad Assistant
@@ -59,6 +18,7 @@ Monitor Capslock ✓
 Launch on Login ✓
 Battery Threshold >
 Check for Updates...
+Automatically Check for Updates ✓
 Quit
 ```
 
@@ -75,82 +35,121 @@ Set Stop Charge At   >
 Refresh Threshold
 ```
 
-Keterangan:
+---
 
-- Baris pertama diambil dari `AppleSmartBattery` di IORegistry (persentase nyata, status `Charging ⚡` / `Not Charging 🔌` / `Discharging 🔋`).
-- Nama baterai dideteksi otomatis (`BAT0` atau `BAT1`); hanya satu baterai yang ditampilkan.
-- Pilihan Start/Stop tersedia dari 0% sampai 100% dengan kelipatan 5%.
-- **Enable Threshold** dinonaktifkan → mengirim `setCMstart=0`, `setCMstop=100`, `setCMInhibitCharge=0`.
-- **Enable Threshold** diaktifkan → mengirim nilai Start/Stop yang dipilih.
-- Kode internal YogaSMC (`BCTG`, `BCSG`) tidak pernah ditampilkan di antarmuka; hanya masuk log debug untuk keperluan audit.
+## Fitur
+
+### Battery Threshold 20–100%
+
+- Mengatur batas **Start** dan **Stop** pengisian (0–100%, langkah 5%) lewat properti
+  `ThinkVPC` milik YogaSMC 1.5.3.
+- `setCMstart` → ACPI `BCCS`, `setCMstop` → ACPI `BCSS`, `setCMInhibitCharge` → `BICS`.
+- Tidak memakai SMC key `B0St`/`B0Sp`/`B0En` yang sering disebut di internet
+  (audit detail ada di [`SUMMARY.md`](SUMMARY.md)).
+- Saat **Enable Threshold** dimatikan, nilai dikirim `start=0`, `stop=100`,
+  `inhibit=0` (pengisian penuh seperti semula).
+
+### Monitor Baterai / Status Sistem
+
+- Baris pertama submenu menampilkan persentase baterai nyata dari `AppleSmartBattery`
+  beserta status `Charging ⚡` / `Not Charging 🔌` / `Discharging 🔋`.
+- Nama baterai (`BAT0` / `BAT1`) dideteksi otomatis.
+- Untuk metrik CPU/RAM, gunakan `Activity Monitor.app`; status item aplikasi ini
+  difokuskan pada baterai dan threshold.
+
+### Menu Bar Icon & Tombol Fungsi
+
+Ikon menu bar memakai `menuIcon` (light/dark otomatis). Tombol keyboard yang didukung:
+
+| Tombol | Fungsi |
+|---|---|
+| **F4** | Bisu / aktifkan mikrofon |
+| **F7** | Cerminkan / perpanjang layar |
+| **F8** | Wi-Fi on/off |
+| **Shift + F8** | Bluetooth on/off |
+| **F9** | Pengaturan Sistem |
+| **F12** | Launchpad |
+| **Fn + Spasi** | Lampu keyboard |
+
+### Update otomatis (Sparkle 2)
+
+- **Check for Updates...** memanggil `SPUStandardUpdaterController.checkForUpdates(nil)`.
+- **Automatically Check for Updates** (default ON) mengontrol
+  `updater.automaticallyChecksForUpdates`.
+- Feed: `https://raw.githubusercontent.com/Syuhadak27/ThinkpadAssistent/main/appcast.xml`
+- Cek otomatis tiap 86400 detik (24 jam). Tanpa internet, Sparkle menampilkan
+  error dialog standar — aplikasi tidak crash.
 
 ---
 
 ## Instalasi
 
-### Persyaratan
-
-1. macOS **Ventura 13 atau lebih baru**.
-2. **YogaSMC 1.5.3** terpasang dan aktif di EFI (kext `YogaSMC-VENTURA.kext` untuk Ventura, `YogaSMC-SEQUOIA.kext` untuk Sequoia).
-3. SSDT pendukung sudah ada di `EFI/OC/ACPI` (misalnya `SSDT-THINK.aml`, `SSDT-BATX.aml`).
-4. Aplikasi **tidak disandbox** karena harus menulis properti ke IOService milik kext.
-
-### Langkah
-
-1. Unduh `ThinkpadAssistant-macOS.zip` dari halaman [Rilis GitHub](https://github.com/Syuhadak27/ThinkpadAssistent/releases).
-2. Ekstrak, lalu pindahkan `ThinkpadAssistant.app` ke folder **Aplikasi**.
-3. Karena aplikasi ditandatangani secara ad-hoc, jalankan dulu di Terminal bila macOS menolak:
+1. Unduh zip terbaru dari [GitHub Releases](https://github.com/Syuhadak27/ThinkpadAssistent/releases).
+2. Ekstrak dan pindahkan `ThinkpadAssistant.app` ke folder **Applications**.
+3. Karena binary ad-hoc signed, jalankan sekali:
 
    ```bash
    xattr -cr /Applications/ThinkpadAssistant.app
    ```
 
-4. Jalankan aplikasi, lalu centang **Launch on Login** di menu bar agar otomatis berjalan saat masuk.
-5. Buka **Battery Threshold** dan atur nilai Start/Stop sesuai keinginan.
+4. Jalankan aplikasi, centang **Launch on Login** jika ingin otomatis.
+5. Buka **Battery Threshold**, pilih Start/Stop, lalu aktifkan **Enable Threshold**.
 
-### SSDT tombol keyboard
+Persyaratan: YogaSMC 1.5.3 aktif di EFI dan SSDT pendukung terpasang. Aplikasi
+tidak disandbox karena harus menulis properti IOKit milik kext.
 
-Folder `Samples/` berisi pasangan patch dan SSDT untuk beberapa model (T440p, T460, T480, X1C6). Cara umumnya:
+---
+
+## Cara Update
+
+- Otomatis: Sparkle mengecek tiap 24 jam dan menampilkan dialog saat ada versi baru.
+- Manual: klik ikon di menu bar → **Check for Updates...**.
+- Matikan/nyalakan otomatis lewat **Automatically Check for Updates** di menu yang sama.
+
+---
+
+## Build dari Source
+
+Butuh **Xcode** (macOS 13+ SDK). Tidak perlu CocoaPods; dependency diambil via
+Swift Package Manager (Sparkle 2.10.1).
 
 ```bash
-iasl -vo SSDT-T460-KBRD.dsl
+git clone https://github.com/Syuhadak27/ThinkpadAssistent.git
+cd ThinkpadAssistent
+open ThinkpadAssistant.xcodeproj
+# Pilih scheme ThinkpadAssistant → Product > Build (⌘B)
 ```
 
-Lalu salin file `.aml` hasil kompilasi ke `EFI/OC/ACPI` dan terapkan patch yang sesuai ke `config.plist`.
+Atau lewat CLI:
+
+```bash
+xcodebuild -project ThinkpadAssistant.xcodeproj \
+  -scheme ThinkpadAssistant \
+  -configuration Release \
+  -destination 'platform=macOS' \
+  CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+  ARCHS='x86_64 arm64'
+```
+
+Hasil: `build/Build/Products/Release/ThinkpadAssistant.app`.
 
 ---
 
-## Build otomatis (GitHub Actions)
+## Rilis Versi Baru (ringkasan)
 
-Dua workflow tersedia di `.github/workflows/`:
+1. Naikkan `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` di Xcode.
+2. Jalankan `./build_release.sh` → menghasilkan zip + `edSignature` + `length`.
+3. Upload `ThinkpadAssistent-X.X.X.zip` ke GitHub Releases dengan tag `vX.X.X`.
+4. Update `appcast.xml` dengan signature, length, dan URL baru.
+5. Push `appcast.xml` ke `main`.
 
-| File | Fungsi |
-|---|---|
-| `build.yml` | Build Release untuk branch selain `master` dan pull request |
-| `release.yml` | Build Release untuk `master` / tag `v*`, lalu membuat atau memperbarui GitHub Release |
-
-Keduanya memakai runner **macos-15-intel** dan argumen:
-
-```
-MACOSX_DEPLOYMENT_TARGET=13.0
-ARCHS='x86_64 arm64'
-CODE_SIGN_IDENTITY=-
-```
-
-Hasil build dikemas sebagai `ThinkpadAssistant-macOS.zip` dan diunggah ke rilis GitHub.
-
-Folder `Refrensi-YogaSMC/` hanya dipakai sebagai **referensi audit** dan tidak pernah dimasukkan ke target build Xcode.
+Panduan lengkap ada di [`SUMMARY_SPARKLE.md`](SUMMARY_SPARKLE.md).
 
 ---
 
-## Catatan penting
+## Lisensi
 
-- Batas pengisian sangat bergantung pada method ACPI `BCCS`/`BCSS` di firmware ThinkPad. Kalau method tidak ada, penulisan threshold akan gagal dan aplikasi menampilkan pesan kesalahan.
-- Ikon **petir ⚡** berarti baterai benar-benar sedang diisi. Ikon **colokan 🔌** berarti AC terpasang tetapi pengisian berhenti (misalnya karena batas Stop sudah tercapai).
-- Start threshold adalah batas saat pengisian **dimulai kembali** setelah berhenti; Stop threshold adalah batas saat pengisian **dihentikan**. mengubah Start saja tidak selalu menghentikan pengisian yang sedang berjalan.
-- Detail lengkap audit SMC key, offset binary, dan alur panggilan ada di [`SUMMARY.md`](SUMMARY.md).
-
----
+MIT — lihat [`LICENSE`](LICENSE).
 
 ## Repository
 

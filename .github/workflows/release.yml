@@ -3,7 +3,7 @@ name: Release Thinkpad Assistant
 on:
   push:
     branches:
-      - master
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -26,14 +26,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare Env
-        run: pod install
-
       - name: Build (Ventura 13.0+, universal x86_64 + arm64)
         run: |
           set -o pipefail
           xcodebuild \
-            -workspace ThinkpadAssistant.xcworkspace \
+            -project ThinkpadAssistant.xcodeproj \
             -scheme ThinkpadAssistant \
             -configuration Release \
             -destination 'platform=macOS' \
@@ -75,23 +72,9 @@ jobs:
           cd "${XCBUILD_PATH}"
           ditto -c -k --keepParent "${MACOS_APP_ARTIFACT}" "${GITHUB_WORKSPACE}/${ARCHIVE_NAME}"
 
-      - name: Create / update GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            RELEASE_TAG="${GITHUB_REF_NAME}"
-          else
-            RELEASE_TAG="v${GITHUB_RUN_NUMBER}"
-          fi
-          echo "Release tag: ${RELEASE_TAG}"
-
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release upload "${RELEASE_TAG}" \
-              "${GITHUB_WORKSPACE}/${ARCHIVE_NAME}" --clobber
-          else
-            gh release create "${RELEASE_TAG}" \
-              "${GITHUB_WORKSPACE}/${ARCHIVE_NAME}#${ARCHIVE_NAME}" \
-              --title "Thinkpad Assistant ${RELEASE_TAG}" \
-              --generate-notes
-          fi
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARCHIVE_NAME }}
+          path: ${{ github.workspace }}/${{ env.ARCHIVE_NAME }}
+          retention-days: 30

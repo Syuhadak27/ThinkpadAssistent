@@ -406,7 +406,7 @@ Dari daftar ini, yang benar-benar SMC key hanyalah yang ada di tabel bagian 3.
 
 ## 9. Implementasi Battery Threshold di ThinkpadAssistant
 
-Status: **sudah ditambahkan ke kode** (belum bisa di-build/dites di sini karena environment ini Android/Termux, bukan macOS).
+Status: **sudah ditambahkan ke kode**. Kode tetap dipertahankan apa adanya; perubahan berikutnya hanya pada sistem update (Sparkle) dan keamanan repo.
 
 ### 9.1 File yang diubah
 
@@ -440,9 +440,9 @@ Tidak ada `B0St`/`B0Sp`/`B0En`/`B1St`/`B1Sp`/`B1En` yang dipakai.
 
 ### 9.3 Cara pakai (tampilan menu baru)
 
-Menu utama: **About → Monitor Capslock → Launch on Login → Battery Threshold → Check for Updates... → Quit**.
+Menu utama: **About → Monitor Capslock → Launch on Login → Battery Threshold → Check for Updates... → Automatically Check for Updates → Quit**.
 
-`Check for Updates...` menanyakan `https://api.github.com/repos/Syuhadak27/ThinkpadAssistent/releases/latest` (silent saat launch, manual saat diklik). Kalau tag release berbeda dengan tag terakhir yang disimpan di `UserDefaults`, menu berubah jadi `Update Available (vN)` dan muncul pilihan **Download / Skip This Version / Later**.
+`Check for Updates...` sekarang memanggil Sparkle 2 (`SPUStandardUpdaterController.checkForUpdates(nil)`). Kode lama yang menanyakan `api.github.com` dan membuka browser sudah dihapus total. Detail ada di bagian 10.
 
 Submenu **Battery Threshold**:
 
@@ -477,3 +477,130 @@ Refresh Threshold
 - ✅ Referensi lokal tetap tidak masuk target build.
 - ⚠️ Belum ada verifikasi runtime karena tidak ada macOS di environment ini.
 - ⚠️ Sandbox dimatikan agar akses IOKit tidak diblokir.
+
+---
+
+## 10. Sparkle 2, keamanan repo, dan status akhir
+
+### 10.1 Kunci Sparkle
+
+Kunci dibuat memakai tool resmi `generate_keys` dari Sparkle 2.10.1 dengan account
+`ThinkpadAssistent`.
+
+**SUPublicEDKey (AMAN dipublikasikan, sudah di `Info.plist`):**
+
+```
+hF5bifr2o1b6HsuVNlHWb7/vCA3SC5JVR9EbJRh6+0c=
+```
+
+**Private key (RAHASIA — JANGAN pernah di-commit):**
+
+```
+~/Documents/ThinkpadAssistent-PrivateKey.txt
+```
+
+File ini berada di luar repo, sudah di-`chmod 600`, dan tidak pernah disalin ke
+folder kerja. Jika hilang, user yang sudah terpasang tidak akan bisa memverifikasi
+update — pulihkan dari backup, jangan generate key baru.
+
+### 10.2 Perubahan update checker
+
+| Sebelum | Sesudah |
+|---|---|
+| `URLSession` ke `api.github.com/repos/.../releases/latest` | `SPUStandardUpdaterController` (Sparkle 2 via SPM, `2.10.1`) |
+| Alert `Download / Skip / Later` + buka browser | Dialog Sparkle + download & install otomatis |
+| Simpan tag di `UserDefaults` | Sparkle mengelola state sendiri |
+| Cek silent saat launch (kode manual) | `SUEnableAutomaticChecks` + `SUScheduledCheckInterval = 86400` |
+
+Menu bar sekarang memuat dua item tambahan: **Check for Updates...** dan
+**Automatically Check for Updates** (default ON). Keduanya dibuat di
+`AppDelegate.setupUpdateMenu()`.
+
+Info.plist yang ditambahkan:
+
+```xml
+<key>SUFeedURL</key>
+<string>https://raw.githubusercontent.com/Syuhadak27/ThinkpadAssistent/main/appcast.xml</string>
+<key>SUEnableAutomaticChecks</key><true/>
+<key>SUScheduledCheckInterval</key><integer>86400</integer>
+<key>SUPublicEDKey</key>
+<string>hF5bifr2o1b6HsuVNlHWb7/vCA3SC5JVR9EbJRh6+0c=</string>
+```
+
+Deployment target dinaikkan ke **macOS 13.0** (Sparkle 2.10.1 mensyaratkan macOS 12+).
+CocoaPods yang kosong dihapus; build sekarang murni SPM + Xcode project.
+
+### 10.3 Status .gitignore & audit keamanan
+
+`.gitignore` sudah diperbarui dengan wajib:
+
+```
+*.pem
+*sparkle_private_key*
+PrivateKey.txt
+sparkle_private_key
+*.ed25519
+*.p12
+*.mobileprovision
+*.cer
+.DS_Store
+build/
+DerivedData/
+*.zip
+*.dmg
+```
+
+Hasil audit pada file yang ter-**commit**:
+
+| Pemeriksaan | Hasil |
+|---|---|
+| `git ls-files \| grep -i private` | kosong |
+| `git grep -i "ghp_\|gho_\|sk-\|password\|api_key" -- '*.swift'` | kosong |
+| file `.p12`, `.pem`, `.cer`, `.mobileprovision`, `*.ed25519` | kosong |
+| `SUPublicEDKey` | **tetap ter-commit** (memang diperbolehkan) |
+| file `build/`, `*.zip`, `*.dmg` besar | kosong |
+| email / token pribadi | tidak ada (hits `@2x` hanya nama file asset retina) |
+
+Tidak ada file sensitif yang perlu di-`git rm --cached`. Tidak ada tindakan
+pembersihan histori git yang diperlukan.
+
+### 10.4 File yang dibuat / diubah
+
+| File | Status |
+|---|---|
+| `appcast.xml` | dibuat (feed awal v1.0.0, `edSignature` masih placeholder `[ISI_NANTI]`) |
+| `build_release.sh` | dibuat (executable; build + zip + `sign_update`) |
+| `SUMMARY_SPARKLE.md` | dibuat (panduan rilis lengkap) |
+| `LICENSE` | dibuat (MIT, Syuhadak27, 2026) |
+| `README.md` | ditulis ulang (tanpa kunci/email/token) |
+| `.gitignore` | diperbarui |
+| `Info.plist` | 4 key Sparkle ditambahkan |
+| `AppDelegate.swift` | update checker lama diganti Sparkle |
+| `project.pbxproj` | SPM Sparkle, target macOS 13.0, CocoaPods dihapus |
+| `.github/workflows/*.yml` | `main` sebagai branch utama, build tanpa CocoaPods |
+
+### 10.5 Verifikasi
+
+- `plutil -lint ThinkpadAssistant.xcodeproj/project.pbxproj` → **OK**
+- `plutil -lint ThinkpadAssistant/Info.plist` → **OK**
+- `xmllint --noout appcast.xml` → **OK**
+- `bash -n build_release.sh` → **OK**
+- `swiftc -typecheck` terhadap `AppDelegate.swift` lengkap (dengan stub modul Sparkle &
+  dependency) → **OK**, hanya warning deprecasi bawaan (`SMLoginItemSetEnabled`,
+  `kIOMasterPortDefault`) yang sudah ada sebelumnya
+- ⚠️ `xcodebuild` **tidak bisa dijalankan di environment ini** (hanya Command Line
+  Tools terpasang, Xcode.app tidak ada). Verifikasi build penuh harus dilakukan
+  di mesin dengan Xcode. Lihat langkah berikutnya.
+
+### 10.6 Langkah selanjutnya untuk user
+
+1. **Build di mesin dengan Xcode**: buka `ThinkpadAssistant.xcodeproj`, pilih
+   scheme `ThinkpadAssistant`, tekan ⌘B. Pastikan SPM Sparkle 2.10.1 ter-resolve.
+2. Cek menu bar: klik ikon → **Check for Updates...** (jangan crash walau offline).
+3. **Publikasikan repo** di GitHub Settings → *Change repository visibility* → Public.
+   Pastikan default branch adalah `main` (branch utama yang dipakai feed Sparkle).
+4. **Rilis v1.0.0**: naikkan versi di Xcode → `./build_release.sh` → upload zip ke
+   GitHub Releases tag `v1.0.0` → tempel `edSignature` + `length` ke `appcast.xml`
+   → push `appcast.xml` ke `main`.
+5. Simpan private key di luar repo (`~/Documents/ThinkpadAssistent-PrivateKey.txt`)
+   dan backup ke tempat aman. **Jangan pernah commit.**

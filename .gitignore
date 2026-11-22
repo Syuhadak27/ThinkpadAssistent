@@ -110,3 +110,22 @@ fastlane/test_output
 iOSInjectionProject/
 
 # End of https://www.gitignore.io/api/macos,swift
+
+# --- Sparkle signing keys & release artifacts (WAJIB) ---
+*.pem
+*sparkle_private_key*
+PrivateKey.txt
+sparkle_private_key
+*.ed25519
+*.p12
+*.mobileprovision
+*.cer
+.DS_Store
+build/
+DerivedData/
+*.zip
+*.dmg
+
+# Temporary local tooling / verification folders
+.sparkle_tmp/
+.swiftcheck/

@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches-ignore:
-      - master
+      - main
     tags-ignore:
       - 'v*'
 
@@ -19,14 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare Env
-        run: pod install
-
       - name: Build (Ventura 13.0+, universal x86_64 + arm64)
         run: |
           set -o pipefail
           xcodebuild \
-            -workspace ThinkpadAssistant.xcworkspace \
+            -project ThinkpadAssistant.xcodeproj \
             -scheme ThinkpadAssistant \
             -configuration Release \
             -destination 'platform=macOS' \

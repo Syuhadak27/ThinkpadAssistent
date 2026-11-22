@@ -9,6 +9,7 @@ import Cocoa
 import ServiceManagement
 import IOKit
 import Darwin
+import Sparkle
 
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -23,18 +24,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private weak var thresholdStartItem: NSMenuItem?
     private weak var thresholdStopItem: NSMenuItem?
     private weak var thresholdEnableItem: NSMenuItem?
-    private weak var updateMenuItem: NSMenuItem?
+
+    // Sparkle 2 — singleton, dibuat di main actor saat menu disiapkan.
+    @MainActor private lazy var updaterController = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+    )
 
     @IBOutlet weak var statusBarMenu: NSMenu!
     
     @IBOutlet weak var monitorCapslocksMenuItem: NSMenuItem!
     @IBOutlet weak var launchAtLoginMenuItem: NSMenuItem!
     
+    @MainActor
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         setupMenuBar()
         ShortcutManager.register()
         CapslockMonitor.register()
-        checkForUpdates(silent: true)
     }
     
     func applicationWillTerminate(_ aNotification: Notification) {
@@ -61,6 +68,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @MainActor
     func setupMenuBar() {
         statusItem.button?.image = NSImage(named: "menuIcon")
         statusItem.button?.alternateImage = NSImage(named: "menuIcon-light")
@@ -383,111 +391,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Update check (GitHub Releases)
+    // MARK: - Sparkle auto-update
     //
-    // Repository: Syuhadak27/ThinkpadAssistent
-    // Release dibuat otomatis oleh GitHub Actions (.github/workflows/release.yml).
-    private enum UpdateCheck {
-        static let apiURL = "https://api.github.com/repos/Syuhadak27/ThinkpadAssistent/releases/latest"
-        static let tagKey = "UpdateCheck.LastSeenTag"
-    }
-
+    // Kode lama yang menanyakan api.github.com dan membuka browser sudah dihapus total.
+    // Sparkle membaca SUFeedURL / SUPublicEDKey dari Info.plist dan menangani
+    // jaringan yang mati tanpa crash (alert error standar Sparkle).
+    @MainActor
     private func setupUpdateMenu() {
-        let item = NSMenuItem(
+        let checkItem = NSMenuItem(
             title: NSLocalizedString("Check for Updates...", comment: ""),
             action: #selector(checkForUpdatesPressed(_:)),
             keyEquivalent: ""
         )
-        item.target = self
-        statusBarMenu.insertItem(item, at: max(0, statusBarMenu.items.count - 1))
-        updateMenuItem = item
+        checkItem.target = self
+        statusBarMenu.insertItem(checkItem, at: max(0, statusBarMenu.items.count - 1))
+
+        let automaticItem = NSMenuItem(
+            title: NSLocalizedString("Automatically Check for Updates", comment: ""),
+            action: #selector(toggleAutomaticChecks(_:)),
+            keyEquivalent: ""
+        )
+        automaticItem.target = self
+        automaticItem.state = updaterController.updater.automaticallyChecksForUpdates ? .on : .off
+        statusBarMenu.insertItem(automaticItem, at: max(0, statusBarMenu.items.count - 1))
     }
 
-    @objc private func checkForUpdatesPressed(_ sender: Any?) {
-        checkForUpdates(silent: false)
+    @objc @MainActor
+    private func checkForUpdatesPressed(_ sender: Any?) {
+        updaterController.checkForUpdates(nil)
     }
 
-    private func checkForUpdates(silent: Bool) {
-        guard let url = URL(string: UpdateCheck.apiURL) else { return }
-        var request = URLRequest(url: url)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("ThinkpadAssistant", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 10
-
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
-            DispatchQueue.main.async {
-                self?.handleUpdateResponse(data: data, error: error, silent: silent)
-            }
-        }.resume()
-    }
-
-    private func handleUpdateResponse(data: Data?, error: Error?, silent: Bool) {
-        if let error = error {
-            if !silent {
-                let alert = NSAlert()
-                alert.messageText = NSLocalizedString("Update Check Failed", comment: "")
-                alert.informativeText = error.localizedDescription
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: NSLocalizedString("OK", comment: ""))
-                alert.runModal()
-            }
-            return
-        }
-
-        guard let data = data,
-              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let tag = json["tag_name"] as? String, !tag.isEmpty else {
-            if !silent {
-                let alert = NSAlert()
-                alert.messageText = NSLocalizedString("Update Check Failed", comment: "")
-                alert.informativeText = NSLocalizedString("Could not read the latest release from GitHub.", comment: "")
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: NSLocalizedString("OK", comment: ""))
-                alert.runModal()
-            }
-            return
-        }
-
-        let htmlURL = json["html_url"] as? String ?? "https://github.com/Syuhadak27/ThinkpadAssistent/releases"
-        let defaults = UserDefaults.standard
-        let lastTag = defaults.string(forKey: UpdateCheck.tagKey)
-
-        if lastTag == tag {
-            updateMenuItem?.title = NSLocalizedString("Check for Updates...", comment: "")
-            if !silent {
-                let alert = NSAlert()
-                alert.messageText = NSLocalizedString("You're up to date", comment: "")
-                alert.informativeText = String(format: NSLocalizedString("Latest release: %@", comment: ""), tag)
-                alert.alertStyle = .informational
-                alert.addButton(withTitle: NSLocalizedString("OK", comment: ""))
-                alert.runModal()
-            }
-            return
-        }
-
-        // Release berbeda / belum pernah dicek -> tawarkan update.
-        updateMenuItem?.title = String(format: NSLocalizedString("Update Available (%@)", comment: ""), tag)
-        guard !silent else { return }
-
-        let alert = NSAlert()
-        alert.messageText = String(format: NSLocalizedString("Update %@ is available", comment: ""), tag)
-        alert.informativeText = NSLocalizedString("A new build has been published on GitHub Releases.", comment: "")
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: NSLocalizedString("Download", comment: ""))
-        alert.addButton(withTitle: NSLocalizedString("Skip This Version", comment: ""))
-        alert.addButton(withTitle: NSLocalizedString("Later", comment: ""))
-
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            if let url = URL(string: htmlURL) { NSWorkspace.shared.open(url) }
-            defaults.set(tag, forKey: UpdateCheck.tagKey)
-            updateMenuItem?.title = NSLocalizedString("Check for Updates...", comment: "")
-        case .alertSecondButtonReturn:
-            defaults.set(tag, forKey: UpdateCheck.tagKey)
-            updateMenuItem?.title = NSLocalizedString("Check for Updates...", comment: "")
-        default:
-            break
-        }
+    @objc @MainActor
+    private func toggleAutomaticChecks(_ sender: NSMenuItem) {
+        let enabled = !updaterController.updater.automaticallyChecksForUpdates
+        updaterController.updater.automaticallyChecksForUpdates = enabled
+        sender.state = enabled ? .on : .off
     }
 
     @IBAction func quitPressed(_ sender: Any) {
