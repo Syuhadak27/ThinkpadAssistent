@@ -25,7 +25,9 @@ Quit
 Submenu **Battery Threshold**:
 
 ```
-BAT0 - 64% - Charging ⚡
+Battery - 86% - Charging
+BAT0 - 73% - Detail EC
+BAT1 - 99% - Detail EC
 Threshold: Start 75% → Stop 85%
 
 Set Start Charge At  >
@@ -51,9 +53,18 @@ Refresh Threshold
 
 ### Monitor Baterai / Status Sistem
 
-- Baris pertama submenu menampilkan persentase baterai nyata dari `AppleSmartBattery`
-  beserta status `Charging ⚡` / `Not Charging 🔌` / `Discharging 🔋`.
-- Nama baterai (`BAT0` / `BAT1`) dideteksi otomatis.
+- **Persen utama diambil dari `IOPowerSources` (`IOPSCopyPowerSourcesInfo` +
+  `IOPSGetPowerSourceDescription`)** — sumber yang sama persis dengan ikon baterai
+  bawaan macOS. Di X260 ini sudah menggabungkan BAT0 + BAT1, jadi angkanya selalu
+  sama dengan ikon macOS (mis. 86%, bukan 73% dari EC).
+- Tampilan utama: `Battery - 86% - Charging`.
+- Di bawahnya, detail EC kecil (opsional): `BAT0 - 73% - Detail EC`,
+  `BAT1 - 99% - Detail EC`. Ini **hanya info**, bukan persen utama.
+- Persen di-refresh tiap 5 detik. Saat charger dicabut/dicolok, observer IOKit
+  langsung memperbarui tampilan dan menulis ulang threshold EC setelah 2 detik
+  (mengatasi bug cabut-colok bablas).
+- Console debug mencetak: `macOS Percent: 86% | App Display: 86% | Match: YES`.
+  Jika `NO` selama >10 detik, muncul warning di log.
 - Untuk metrik CPU/RAM, gunakan `Activity Monitor.app`; status item aplikasi ini
   difokuskan pada baterai dan threshold.
 

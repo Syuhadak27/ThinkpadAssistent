@@ -447,7 +447,9 @@ Menu utama: **About → Monitor Capslock → Launch on Login → Battery Thresho
 Submenu **Battery Threshold**:
 
 ```
-BAT0 - 64% - Charging ⚡
+Battery - 86% - Charging
+BAT0 - 73% - Detail EC
+BAT1 - 99% - Detail EC
 Threshold: Start 75% → Stop 85%
 
 Set Start Charge At  >
@@ -457,7 +459,7 @@ Set Stop Charge At   >
 Refresh Threshold
 ```
 
-- Baris pertama diambil dari `AppleSmartBattery` di IORegistry (`CurrentCapacity`/`MaxCapacity`, `IsCharging`, `ExternalConnected`), **bukan** dari `BCTG`/`BCSG`.
+- Baris pertama diambil dari `IOPowerSources` (sumber angka ikon macOS), **bukan** lagi dari EC/BAT0. Detail EC hanya tambahan. Lihat bagian 11.
 - Nama baterai dideteksi otomatis (`BAT0` atau `BAT1`); hanya satu yang ditampilkan.
 - `Set Start Charge At` / `Set Stop Charge At`: 0–100% kelipatan 5, dengan centang pada nilai aktif.
 - `Enable Threshold`: matikan → kirim `setCMstart=0`, `setCMstop=100`, `setCMInhibitCharge=0`. Hidupkan → kirim Start/Stop yang dipilih.
@@ -604,3 +606,60 @@ pembersihan histori git yang diperlukan.
    → push `appcast.xml` ke `main`.
 5. Simpan private key di luar repo (`~/Documents/ThinkpadAssistent-PrivateKey.txt`)
    dan backup ke tempat aman. **Jangan pernah commit.**
+
+---
+
+## 11. Sinkronisasi persen baterai dengan ikon macOS
+
+### Masalah
+
+Ikon baterai macOS menampilkan **86%** (benar), sementara app menampilkan
+**BAT0 - 73%** (salah). Penyebabnya: app hanya membaca satu `AppleSmartBattery`
+(BAT0) dari IORegistry/EC, sedangkan macOS menggabungkan BAT0 + BAT1 lewat
+`IOPowerSources`.
+
+### Perbaikan
+
+| Aspek | Sebelum | Sesudah |
+|---|---|---|
+| Sumber persen | `AppleSmartBattery` EC (BAT0 saja) | `IOPSCopyPowerSourcesInfo()` + `IOPSGetPowerSourceDescription()` |
+| Aggregasi | satu baterai | `InternalBattery` = gabungan BAT0 + BAT1 (sama seperti ikon macOS) |
+| Rumus | `CurrentCapacity / MaxCapacity` per BAT0 | `CurrentCapacity / MaxCapacity * 100` dari IOPS |
+| Baris utama | `BAT0 - 73% - Charging ⚡` | `Battery - 86% - Charging` |
+| Detail EC | tidak ada | `BAT0 - 73% - Detail EC`, `BAT1 - 99% - Detail EC` (kecil, opsional) |
+| Threshold | EC/SMC | **tetap EC/SMC** (tidak berubah) |
+
+Pemisahan penting: **Display = IOPowerSources (macOS), Control = EC (YogaSMC/ThinkVPC)**.
+Tidak ada penulisan ke SMC untuk memaksa ikon macOS mengikuti app.
+
+### Refresh & observer
+
+- `Timer` 5 detik di `RunLoop.main` → `refreshThresholdMenu()`.
+- `IOPSNotificationCreateRunLoopSource` → notifikasi langsung saat charger
+  dicabut/dicolok → refresh + `forceApplyThreshold()` setelah 2 detik (debounce)
+  untuk mengatasi bug cabut-colok bablas.
+- Threshold tetap ditulis ulang lewat `BatteryThresholdManager.apply()` (jalur
+  `IORegistryEntrySetCFProperties` → fallback `IOConnectSetCFProperties`).
+
+### Debug / verifikasi
+
+Console mencetak:
+
+```
+macOS Percent: 86% | App Display: 86% | Match: YES
+```
+
+Angka "App Display" dibaca kembali dari judul menu item yang benar-benar tampil,
+bukan sekadar variabel internal. Jika `Match = NO` terus selama ≥10 detik,
+`NSLog` warning dikeluarkan.
+
+Verifikasi lokal di environment ini: `IOPowerSources` mengembalikan
+`Current Capacity: 86 / Max Capacity: 100` → `Battery - 86% - ...`, sama dengan
+angka ikon macOS yang dilaporkan user. `swiftc -typecheck` AppDelegate dengan stub
+modul → OK (hanya warning deprecasi yang sudah ada sebelumnya).
+
+### Yang TIDAK diubah
+
+- Ikon baterai bawaan macOS.
+- Ikon "T" merah aplikasi.
+- Logika Battery Threshold Start/Stop ke EC.

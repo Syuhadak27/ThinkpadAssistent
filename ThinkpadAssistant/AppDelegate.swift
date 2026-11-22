@@ -8,8 +8,13 @@
 import Cocoa
 import ServiceManagement
 import IOKit
+import IOKit.ps
 import Darwin
 import Sparkle
+
+private extension Notification.Name {
+    static let powerSourceDidChange = Notification.Name("BatterySync.PowerSourceDidChange")
+}
 
 @NSApplicationMain
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -20,6 +25,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Battery threshold (YogaSMC ThinkVPC) — lihat SUMMARY.md bagian 4 dan 9.
     private weak var thresholdBatteryItem: NSMenuItem?
+    private weak var thresholdEC0Item: NSMenuItem?
+    private weak var thresholdEC1Item: NSMenuItem?
     private weak var thresholdSummaryItem: NSMenuItem?
     private weak var thresholdStartItem: NSMenuItem?
     private weak var thresholdStopItem: NSMenuItem?
@@ -31,6 +38,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         updaterDelegate: nil,
         userDriverDelegate: nil
     )
+
+    // Battery sync monitoring (IOPowerSources = sumber angka ikon macOS).
+    private var batteryRefreshTimer: Timer?
+    private var powerSourceRunLoopSource: CFRunLoopSource?
+    private var batteryMismatchSince: Date?
+    private var lastDisplayedPercent: Int?
+    private var pendingForceApply: DispatchWorkItem?
 
     @IBOutlet weak var statusBarMenu: NSMenu!
     
@@ -87,6 +101,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         monitorCapslocksMenuItem.state = CapslockMonitor.isActive ? .on : .off
 
         setupBatteryThresholdMenu()
+        startBatteryMonitoring()
         setupUpdateMenu()
     }
 
@@ -119,6 +134,68 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let name: String
         let percent: Int
         let stateText: String
+    }
+
+    /// Sumber kebenaran: IOPowerSources — persis yang dipakai macOS untuk ikon baterai.
+    /// Di X260 ini menggabungkan BAT0 + BAT1 menjadi satu "InternalBattery".
+    private struct MacOSBatteryStatus {
+        let percent: Int
+        let stateText: String
+        let current: Int
+        let max: Int
+        let timeRemainingMinutes: Int?
+    }
+
+    private enum MacOSBatteryReader {
+        static func read() -> MacOSBatteryStatus? {
+            let blob = IOPSCopyPowerSourcesInfo().takeRetainedValue()
+            guard let array = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef] else {
+                return nil
+            }
+
+            for source in array {
+                guard let description = IOPSGetPowerSourceDescription(blob, source)?
+                        .takeUnretainedValue() as? [String: Any],
+                      let type = description[kIOPSTypeKey as String] as? String,
+                      type == kIOPSInternalBatteryType else { continue }
+
+                let current = int(description[kIOPSCurrentCapacityKey as String])
+                let maxCapacity = int(description[kIOPSMaxCapacityKey as String])
+                let percent = maxCapacity > 0
+                    ? min(100, max(0, Int(round(Double(current) / Double(maxCapacity) * 100))))
+                    : 0
+
+                let charging = description[kIOPSIsChargingKey as String] as? Bool ?? false
+                let state = description[kIOPSPowerSourceStateKey as String] as? String ?? ""
+                let stateText: String
+                if charging {
+                    stateText = NSLocalizedString("Charging", comment: "")
+                } else if state == kIOPSACPowerValue {
+                    stateText = NSLocalizedString("Not Charging", comment: "")
+                } else {
+                    stateText = NSLocalizedString("Discharging", comment: "")
+                }
+
+                let remaining = charging
+                    ? int(description[kIOPSTimeToFullChargeKey as String],
+                          fallback: -1)
+                    : int(description[kIOPSTimeToEmptyKey as String],
+                          fallback: -1)
+
+                return MacOSBatteryStatus(
+                    percent: percent,
+                    stateText: stateText,
+                    current: current,
+                    max: maxCapacity,
+                    timeRemainingMinutes: remaining >= 0 ? remaining : nil
+                )
+            }
+            return nil
+        }
+
+        private static func int(_ value: Any?, fallback: Int = 0) -> Int {
+            (value as? NSNumber)?.intValue ?? fallback
+        }
     }
 
     private final class BatteryThresholdManager {
@@ -262,23 +339,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return BatteryStatus(name: batteryName(service), percent: percent, stateText: stateText)
         }
 
-        /// Cari satu-satunya baterai yang terpasang. Tidak pernah menampilkan BAT0+BAT1.
-        func batteryStatus() -> BatteryStatus {
+        /// Detail EC per baterai (BAT0, BAT1). Hanya dipakai untuk baris detail kecil —
+        /// BUKAN untuk persen utama. Control threshold tetap memakai jalur EC/SMC ini.
+        func ecBatteryDetails() -> [BatteryStatus] {
             let matching = IOServiceMatching("AppleSmartBattery")
             var iterator: io_iterator_t = 0
             guard IOServiceGetMatchingServices(kIOMasterPortDefault, matching, &iterator) == kIOReturnSuccess else {
-                return BatteryStatus(name: "BAT0", percent: 0, stateText: NSLocalizedString("Unknown", comment: ""))
+                return []
             }
             defer { IOObjectRelease(iterator) }
 
+            var result: [BatteryStatus] = []
             var service = IOIteratorNext(iterator)
             while service != 0 {
-                let status = readBattery(service)
+                if let status = readBattery(service) { result.append(status) }
                 IOObjectRelease(service)
-                if let status = status { return status }
                 service = IOIteratorNext(iterator)
             }
-            return BatteryStatus(name: "BAT0", percent: 0, stateText: NSLocalizedString("Unknown", comment: ""))
+            return result.sorted { $0.name < $1.name }
         }
     }
 
@@ -303,13 +381,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         let batteryLine = NSMenuItem(title: "…", action: nil, keyEquivalent: "")
+        let ec0Line = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        let ec1Line = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         let summaryLine = NSMenuItem(title: "…", action: nil, keyEquivalent: "")
         batteryLine.isEnabled = false
+        ec0Line.isEnabled = false
+        ec1Line.isEnabled = false
         summaryLine.isEnabled = false
-        menu.addItem(batteryLine)
-        menu.addItem(summaryLine)
         thresholdBatteryItem = batteryLine
+        thresholdEC0Item = ec0Line
+        thresholdEC1Item = ec1Line
         thresholdSummaryItem = summaryLine
+        menu.addItem(batteryLine)
+        menu.addItem(ec0Line)
+        menu.addItem(ec1Line)
+        menu.addItem(summaryLine)
         menu.addItem(NSMenuItem.separator())
 
         let startItem = NSMenuItem(title: NSLocalizedString("Set Start Charge At", comment: ""), action: nil, keyEquivalent: "")
@@ -347,12 +433,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func refreshThresholdMenu() {
         let manager = BatteryThresholdManager.shared
-        let battery = manager.batteryStatus()
+        let power = MacOSBatteryReader.read()
 
-        thresholdBatteryItem?.title = String(
-            format: NSLocalizedString("%@ - %d%% - %@", comment: ""),
-            battery.name, battery.percent, battery.stateText
-        )
+        // Persen utama = IOPowerSources, sumber yang sama dengan ikon baterai macOS.
+        if let power = power {
+            thresholdBatteryItem?.title = String(
+                format: NSLocalizedString("Battery - %d%% - %@", comment: ""),
+                power.percent, power.stateText
+            )
+            let remaining = power.timeRemainingMinutes.map { " / \($0) min" } ?? ""
+            NSLog("[BatterySync] source IOPowerSources: %d/%d = %d%%%@ | %@",
+                  power.current, power.max, power.percent, remaining, power.stateText)
+        } else {
+            thresholdBatteryItem?.title = NSLocalizedString("Battery - Unknown", comment: "")
+        }
+
+        // Detail EC kecil di bawahnya — tidak pernah dipakai sebagai persen utama.
+        let details = manager.ecBatteryDetails()
+        applyECDetail(thresholdEC0Item, detail: details.indices.contains(0) ? details[0] : nil)
+        applyECDetail(thresholdEC1Item, detail: details.indices.contains(1) ? details[1] : nil)
+
         thresholdSummaryItem?.title = String(
             format: NSLocalizedString("Threshold: Start %d%% → Stop %d%%", comment: ""),
             manager.start, manager.stop
@@ -363,6 +463,121 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Debug saja — tidak pernah tampil di UI.
         manager.logRawThresholds()
+        verifyDisplaySync(macOSPercent: power?.percent)
+    }
+
+    private func applyECDetail(_ item: NSMenuItem?, detail: BatteryStatus?) {
+        guard let item = item else { return }
+        let text: String
+        if let detail = detail {
+            text = String(
+                format: NSLocalizedString("%@ - %d%% - Detail EC", comment: ""),
+                detail.name, detail.percent
+            )
+        } else {
+            text = ""
+        }
+        item.attributedTitle = NSAttributedString(string: text, attributes: [
+            .font: NSFont.systemFont(ofSize: 10),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ])
+        item.isHidden = (detail == nil)
+    }
+
+    // MARK: - Battery sync monitoring (IOPowerSources)
+
+    private func startBatteryMonitoring() {
+        refreshThresholdMenu()
+
+        batteryRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            self?.refreshThresholdMenu()
+        }
+        if let timer = batteryRefreshTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePowerSourceChange),
+            name: .powerSourceDidChange,
+            object: nil
+        )
+
+        // Observer bawaan IOKit: langsung dibangkitkan saat charger dicabut/dicolok.
+        let source = IOPSNotificationCreateRunLoopSource({ _ in
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .powerSourceDidChange, object: nil)
+            }
+        }, nil)?.takeRetainedValue()
+        powerSourceRunLoopSource = source
+        if let source = source {
+            CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+        }
+    }
+
+    @objc private func handlePowerSourceChange() {
+        refreshThresholdMenu()
+        // Bug cabut-colok bablas: tulis ulang threshold EC setelah EC sempat settle.
+        pendingForceApply?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.forceApplyThreshold()
+        }
+        pendingForceApply = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+    }
+
+    private func forceApplyThreshold() {
+        do {
+            try BatteryThresholdManager.shared.apply()
+            NSLog("[BatterySync] Power source changed: threshold re-applied to EC")
+        } catch {
+            NSLog("[BatterySync] WARNING: forceApplyThreshold failed: %@", error.localizedDescription)
+        }
+        refreshThresholdMenu()
+    }
+
+    private func displayedPercentFromTitle(_ title: String?) -> Int? {
+        guard let title = title else { return nil }
+        let parts = title.components(separatedBy: " - ")
+        guard parts.count >= 2 else { return nil }
+        return Int(parts[1].replacingOccurrences(of: "%", with: ""))
+    }
+
+    /// Console debug: bandingkan angka sumber macOS dengan angka yang benar-benar tampil.
+    private func verifyDisplaySync(macOSPercent: Int?) {
+        guard let macOSPercent = macOSPercent else { return }
+        let displayPercent = displayedPercentFromTitle(thresholdBatteryItem?.title)
+        lastDisplayedPercent = displayPercent
+        let match = displayPercent == macOSPercent
+        let line = String(
+            format: "macOS Percent: %d%% | App Display: %@%% | Match: %@",
+            macOSPercent,
+            displayPercent.map(String.init) ?? "?",
+            match ? "YES" : "NO"
+        )
+        print("[BatterySync] " + line)
+        NSLog("[BatterySync] %@", line)
+
+        if match {
+            batteryMismatchSince = nil
+            return
+        }
+        let now = Date()
+        if batteryMismatchSince == nil {
+            batteryMismatchSince = now
+        } else if now.timeIntervalSince(batteryMismatchSince!) >= 10 {
+            NSLog("[BatterySync] WARNING: app display tidak sinkron dengan ikon macOS selama >10 detik (%@)", line)
+            batteryMismatchSince = now
+        }
+    }
+
+    deinit {
+        batteryRefreshTimer?.invalidate()
+        pendingForceApply?.cancel()
+        NotificationCenter.default.removeObserver(self)
+        if let source = powerSourceRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .defaultMode)
+        }
     }
 
     @objc private func setStart(_ sender: NSMenuItem) {
